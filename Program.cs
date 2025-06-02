@@ -25,12 +25,6 @@ namespace BLE_App
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
             Application.Run(new Form1());
-
-            // Start the program
-           // var program = new Program();
-
-            // Close on key press
-            //Console.ReadLine();
         }
 
        

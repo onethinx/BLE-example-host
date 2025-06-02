@@ -13,9 +13,8 @@ using Windows.Storage.Streams;
 using Windows.Devices.Bluetooth;
 using Windows.Devices.Bluetooth.GenericAttributeProfile;
 using Windows.Security.Cryptography;
-using System.Runtime.ConstrainedExecution;
-using static System.Windows.Forms.VisualStyles.VisualStyleElement;
-
+using System.Reflection;
+using System.Diagnostics;
 
 // To use the WinRT APIs, add two references:
 // C:\Program Files(x86)\Windows Kits\10\UnionMetadata\Windows.winmd
@@ -23,12 +22,10 @@ using static System.Windows.Forms.VisualStyles.VisualStyleElement;
 
 namespace BLE_App
 {
-
-   
     public partial class Form1 : Form
     {
-        const string AppName = "Onethinx BLE Demo App v1.0";
-        
+        const string AppName = "Onethinx BLE Demo App v1.1";
+
         Thread BLEscanThread;
         int scanningActiveTime;
         Thread connectWatcherThread;
@@ -36,11 +33,13 @@ namespace BLE_App
         bool buttonConnected = false;
         float progressBar1 = 0, progressBar2 = 0;
         bool stopWatcher = false;
+        private Thread _animThread;
+        private bool _running;
 
         public static class deviceSpecs
         {
-            public static ulong BluetoothAddressFirst = 0xA050000000;
-            public static ulong BluetoothAddressLast = 0xA05000FFFF;
+            public static ulong BluetoothAddressFirst = 0x00A050000000;
+            public static ulong BluetoothAddressLast = 0x01A05000FFFF;
             public static Guid DataInOutUuid = new Guid("CB7A2F6D-8C08-4F86-8B4C-879F858EF397");
             public static Guid DataOutUuid = new Guid("310FE7D9-C1F5-4880-BFA6-FD1C3507B39D");
             public static Guid DataInUuid = new Guid("70A6F431-7542-44C4-9B45-A3C0D55FC027");
@@ -86,6 +85,53 @@ namespace BLE_App
             out_received
         }
 
+        public enum BLEcommand
+        {
+            uart_send = 0x01,
+            lorawan_join = 0x10,
+            lorawan_send = 0x11,
+
+            host_message = 0x81,
+            host_error = 0x82,
+            host_beep = 0x83
+        }
+
+        public static class BLEBuffer
+        {
+            public static BLEcommand command;
+            public static byte[] data;
+            public static byte[] rawdata
+            {
+                get
+                {
+                    return (new byte[] { (byte)command }).Concat(data).ToArray();
+                }
+                set
+                {
+                    command = (BLEcommand)value[0];
+                    data = value.Skip(1).ToArray();
+                }
+            }
+            public static string message
+            {
+                get
+                {
+                    return Encoding.UTF8.GetString(data);
+                }
+                set
+                {
+                    data = Encoding.ASCII.GetBytes(value);
+                }
+            }
+            public static string hexString
+            {
+                get
+                {
+                    return BitConverter.ToString(data);
+                }
+            }
+        }
+            
         public class scannedDeviceInfo
         {
             public ulong Address;
@@ -282,24 +328,60 @@ namespace BLE_App
         private void Charac_ValueChanged(GattCharacteristic sender, GattValueChangedEventArgs args)
         {
             var reader = DataReader.FromBuffer(args.CharacteristicValue);
+            SetGUI(new GUIitem(GUIset.text_green, $"{sender.CharacteristicProperties} received: {reader.UnconsumedBufferLength} bytes"), new GUIitem(GUIset.out_received));
+
+            
             byte[] input = new byte[reader.UnconsumedBufferLength];
             reader.ReadBytes(input);
-            string hexBytes = BitConverter.ToString(input);
-            string text = Encoding.UTF8.GetString(input);
-            SetGUI(new GUIitem(GUIset.text_green, $"{sender.CharacteristicProperties} received: '{text}' ({hexBytes})"), new GUIitem(GUIset.out_received));
+            BLEBuffer.rawdata = input;
+            switch (BLEBuffer.command)
+            {
+                case BLEcommand.host_message:
+                    SetGUI(new GUIitem(GUIset.text_green, $"{BLEBuffer.message} ({BLEBuffer.hexString})"));
+                    break;
+                case BLEcommand.host_error:
+                    SetGUI(new GUIitem(GUIset.text_red, $"{BLEBuffer.message}"));
+                    break;
+                case BLEcommand.host_beep:
+                    byte tone = BLEBuffer.data[0];
+                    byte time = BLEBuffer.data[1];
+                    /// <param name="tone">Semitone offset from C4 (0⇒C2, 12⇒C3, etc.).</param>
+                    /// <param name="time">Duration in 10 ms units (e.g., 30 ⇒ 300 ms).</param>
+                    double baseFreq = 65.41; // C2
+                    double freq = baseFreq * Math.Pow(2.0, tone / 12.0);
+                    Console.Beep((int)Math.Round(freq), time * 10);
+                    break;
+
+            }
         }
 
-        private async void btSend_Click(object sender, EventArgs e)
+        private void btJoin_Click(object sender, EventArgs e)
+        {
+            BLESend(BLEcommand.lorawan_join, "");
+        }
+
+        private void btSendLoRa_Click(object sender, EventArgs e)
+        {
+            BLESend(BLEcommand.lorawan_send, tbSend.Text);
+        }
+
+        private void btSend_Click(object sender, EventArgs e)
+        {
+            BLESend(BLEcommand.uart_send, tbSend.Text);
+        }
+
+        private async void BLESend(BLEcommand command, string message)
         {
             try
             {
-                byte[] bfr = Encoding.ASCII.GetBytes(tbSend.Text);
-                IBuffer buffer = CryptographicBuffer.CreateFromByteArray(bfr);
+                BLEBuffer.message = message;
+                BLEBuffer.command = command;
+                IBuffer buffer = CryptographicBuffer.CreateFromByteArray(BLEBuffer.rawdata);
                 var status = await connectedDevice.dataInCharacteristic.WriteValueAsync(buffer, GattWriteOption.WriteWithoutResponse);
                 if (status == GattCommunicationStatus.Success)
                 {
-                    string hexStr = BitConverter.ToString(bfr);
-                    SetGUI(new GUIitem(GUIset.text_black, $"Success sending '{tbSend.Text}' ({hexStr})"), new GUIitem(GUIset.in_sent));
+                    string MessageString = message.Length > 0 ? $"-'{message}' ({BLEBuffer.hexString})" : "";
+                    SetGUI(new GUIitem(GUIset.text_black, $"Success sending: 0x{(byte) command:X2}{MessageString}"), new GUIitem(GUIset.in_sent));
                 }
                 else throw new Exception($"{status}");
             }
@@ -365,40 +447,58 @@ namespace BLE_App
                             btConnect.Enabled = true;
                             break;
                         case GUIset.send_disabled:
-                            btSend.Enabled = false;
+                            pnlBLE.Enabled = false;
                             break;
                         case GUIset.send_enabled:
                            // btConnect.Text = "Disconnect";
-                            btSend.Enabled = true;
+                            pnlBLE.Enabled = true;
                             break;
                         case GUIset.in_sent:
-                            progressBar1 = pnlProgress.Size.Width;
-                            progressTimer.Enabled = true;
+                           // progressBar1 = pnlProgress.Size.Width;
+                           // progressTimer.Enabled = true;
+                            StartProgress(true, false);
                             break;
                         case GUIset.out_received:
-                            progressBar2 = pnlProgress.Size.Width;
-                            progressTimer.Enabled = true;
+                            // progressBar2 = pnlProgress.Size.Width;
+                            // progressTimer.Enabled = true;
+                            StartProgress(false, true);
                             break;
                     }
                 }
                 buttonConnected = btConnect.Text[0] != 'C';
             });
         }
-        //float progressBar1 = 0, progressBar2 = 0;
 
-        private void progressTimer_Tick(object sender, EventArgs e)
+        private void StartProgress(bool bar1, bool bar2)
         {
-            if (progressBar1 < 0 && progressBar2 < 0) progressTimer.Enabled = false;
-            pnlProgress.Refresh();
-            if (progressBar1 > 0) progressBar1 -= 0.005f * pnlProgress.Size.Width + progressBar1 * 0.1f;
-            if (progressBar2 > 0) progressBar2 -= 0.005f * pnlProgress.Size.Width + progressBar2 * 0.1f;
-            //if (progressBar1 != progressBar1 || progressBar2 != progressBar2)
-            //{
-            //    progressBar1 = (int)(progressBar1 * 1); progressBar2 = (int)(progressBar2 * 1);
-            //    pnlProgress.Refresh();
-            // }
-            
-           
+            if (bar1) progressBar1 = pnlProgress.Size.Width;
+            if (bar2) progressBar2 = pnlProgress.Size.Width;
+            if (_running && _animThread != null && _animThread.IsAlive) return; // already running
+            pnlProgress.Invoke((MethodInvoker)(() => pnlProgress.Invalidate()));
+            _running = true;
+            _animThread = new Thread(ProgressLoop)
+            {
+                IsBackground = true,
+                Priority = ThreadPriority.Highest
+            };
+            _animThread.Start();
+        }
+
+        private void ProgressLoop()
+        {
+            float shrinkStep = 0.005f * pnlProgress.ClientSize.Width;
+            while (_running)
+            {
+                if (progressBar1 > 0f) progressBar1 -= shrinkStep + progressBar1 * 0.03f;
+                if (progressBar2 > 0f) progressBar2 -= shrinkStep + progressBar2 * 0.03f;
+                pnlProgress.Invoke((MethodInvoker)(() => pnlProgress.Invalidate()));
+                if (progressBar1 <= 0f && progressBar2 <= 0f)
+                {
+                    _running = false;
+                    break;
+                }
+                Thread.Sleep(10);
+            }
         }
 
         private void Form1_FormClosing(object sender, FormClosingEventArgs e)
@@ -409,16 +509,21 @@ namespace BLE_App
         private void pnlProgress_Paint(object sender, PaintEventArgs e)
         {
             bool reversed = false;
-            Brush brsh1 = new SolidBrush(Color.LightBlue);
-            Brush brsh2 = new SolidBrush(Color.LightSalmon);
-            Rectangle rct1 = new Rectangle(0, 0, (int) progressBar1, pnlProgress.Size.Height);
-            Rectangle rct2 = new Rectangle(0, 0, (int) progressBar2, pnlProgress.Size.Height);
-            if (progressBar1 > 0 && progressBar2 > 0 && progressBar2 > progressBar1) reversed = true;
-            if (!reversed && progressBar1 != 0) e.Graphics.FillRectangle(brsh1, rct1);
-            if (progressBar2 != 0) e.Graphics.FillRectangle(brsh2, rct2);
-            if (reversed && progressBar1 != 0) e.Graphics.FillRectangle(brsh1, rct1);
+            using (Brush brsh1 = new SolidBrush(Color.LightBlue))
+            using (Brush brsh2 = new SolidBrush(Color.LightSalmon))
+            using (Brush brshf = new SolidBrush(Color.White))
+            {
+                Rectangle rct1 = new Rectangle(0, 0, (int)progressBar1, pnlProgress.Size.Height);
+                Rectangle rct2 = new Rectangle(0, 0, (int)progressBar2, pnlProgress.Size.Height);
+                e.Graphics.FillRectangle(brshf, pnlProgress.DisplayRectangle);
+                if (progressBar1 > 0 && progressBar2 > 0 && progressBar2 > progressBar1) reversed = true;
+                if (!reversed && progressBar1 != 0) e.Graphics.FillRectangle(brsh1, rct1);
+                if (progressBar2 != 0) e.Graphics.FillRectangle(brsh2, rct2);
+                if (reversed && progressBar1 != 0) e.Graphics.FillRectangle(brsh1, rct1);
+            }
         }
     }
+
     public static class RichTextBoxExtensions
     {
         public static void AppendText(this RichTextBox box, string text, Color color)
@@ -432,4 +537,17 @@ namespace BLE_App
             box.ScrollToCaret();
         }
     }
+
+    public class DoubleBufferedPanel : Panel
+    {
+        public DoubleBufferedPanel()
+        {
+            // Turn on double buffering:
+            this.SetStyle(ControlStyles.UserPaint, true);
+            this.SetStyle(ControlStyles.AllPaintingInWmPaint, true);
+            this.SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
+            this.UpdateStyles();
+        }
+    }
+
 }

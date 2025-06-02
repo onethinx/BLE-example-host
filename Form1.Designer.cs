@@ -28,7 +28,6 @@
         /// </summary>
         private void InitializeComponent()
         {
-            this.components = new System.ComponentModel.Container();
             System.ComponentModel.ComponentResourceManager resources = new System.ComponentModel.ComponentResourceManager(typeof(Form1));
             this.btBLEscan = new System.Windows.Forms.Button();
             this.cbScannedDevices = new System.Windows.Forms.ComboBox();
@@ -36,8 +35,11 @@
             this.rtbInfo = new System.Windows.Forms.RichTextBox();
             this.tbSend = new System.Windows.Forms.TextBox();
             this.btSend = new System.Windows.Forms.Button();
-            this.pnlProgress = new System.Windows.Forms.Panel();
-            this.progressTimer = new System.Windows.Forms.Timer(this.components);
+            this.pnlProgress = new BLE_App.DoubleBufferedPanel();
+            this.btSendLoRa = new System.Windows.Forms.Button();
+            this.btJoin = new System.Windows.Forms.Button();
+            this.pnlBLE = new System.Windows.Forms.Panel();
+            this.pnlBLE.SuspendLayout();
             this.SuspendLayout();
             // 
             // btBLEscan
@@ -91,9 +93,9 @@
             | System.Windows.Forms.AnchorStyles.Right)));
             this.tbSend.BorderStyle = System.Windows.Forms.BorderStyle.None;
             this.tbSend.Font = new System.Drawing.Font("Consolas", 9.75F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(0)));
-            this.tbSend.Location = new System.Drawing.Point(412, 17);
+            this.tbSend.Location = new System.Drawing.Point(102, 6);
             this.tbSend.Name = "tbSend";
-            this.tbSend.Size = new System.Drawing.Size(437, 16);
+            this.tbSend.Size = new System.Drawing.Size(341, 16);
             this.tbSend.TabIndex = 6;
             this.tbSend.Text = "Hello World!";
             // 
@@ -101,13 +103,12 @@
             // 
             this.btSend.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.btSend.Enabled = false;
             this.btSend.ImageAlign = System.Drawing.ContentAlignment.MiddleRight;
-            this.btSend.Location = new System.Drawing.Point(408, 41);
+            this.btSend.Location = new System.Drawing.Point(100, 30);
             this.btSend.Name = "btSend";
-            this.btSend.Size = new System.Drawing.Size(443, 44);
+            this.btSend.Size = new System.Drawing.Size(170, 44);
             this.btSend.TabIndex = 5;
-            this.btSend.Text = "Send";
+            this.btSend.Text = "Send over UART";
             this.btSend.UseVisualStyleBackColor = true;
             this.btSend.Click += new System.EventHandler(this.btSend_Click);
             // 
@@ -115,17 +116,53 @@
             // 
             this.pnlProgress.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
             | System.Windows.Forms.AnchorStyles.Right)));
-            this.pnlProgress.BackColor = System.Drawing.Color.WhiteSmoke;
+            this.pnlProgress.BackColor = System.Drawing.SystemColors.Control;
             this.pnlProgress.Location = new System.Drawing.Point(12, 91);
             this.pnlProgress.Name = "pnlProgress";
-            this.pnlProgress.Size = new System.Drawing.Size(837, 10);
+            this.pnlProgress.Size = new System.Drawing.Size(839, 10);
             this.pnlProgress.TabIndex = 119;
             this.pnlProgress.Paint += new System.Windows.Forms.PaintEventHandler(this.pnlProgress_Paint);
             // 
-            // progressTimer
+            // btSendLoRa
             // 
-            this.progressTimer.Interval = 25;
-            this.progressTimer.Tick += new System.EventHandler(this.progressTimer_Tick);
+            this.btSendLoRa.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.btSendLoRa.ImageAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.btSendLoRa.Location = new System.Drawing.Point(273, 30);
+            this.btSendLoRa.Name = "btSendLoRa";
+            this.btSendLoRa.Size = new System.Drawing.Size(170, 44);
+            this.btSendLoRa.TabIndex = 120;
+            this.btSendLoRa.Text = "Send over LoRaWAN";
+            this.btSendLoRa.UseVisualStyleBackColor = true;
+            this.btSendLoRa.Click += new System.EventHandler(this.btSendLoRa_Click);
+            // 
+            // btJoin
+            // 
+            this.btJoin.Anchor = ((System.Windows.Forms.AnchorStyles)(((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.btJoin.ImageAlign = System.Drawing.ContentAlignment.MiddleRight;
+            this.btJoin.Location = new System.Drawing.Point(0, 1);
+            this.btJoin.Name = "btJoin";
+            this.btJoin.Size = new System.Drawing.Size(94, 73);
+            this.btJoin.TabIndex = 121;
+            this.btJoin.Text = "LoRaWAN Join";
+            this.btJoin.UseVisualStyleBackColor = true;
+            this.btJoin.Click += new System.EventHandler(this.btJoin_Click);
+            // 
+            // pnlBLE
+            // 
+            this.pnlBLE.Anchor = ((System.Windows.Forms.AnchorStyles)((((System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Bottom) 
+            | System.Windows.Forms.AnchorStyles.Left) 
+            | System.Windows.Forms.AnchorStyles.Right)));
+            this.pnlBLE.Controls.Add(this.btJoin);
+            this.pnlBLE.Controls.Add(this.btSendLoRa);
+            this.pnlBLE.Controls.Add(this.tbSend);
+            this.pnlBLE.Controls.Add(this.btSend);
+            this.pnlBLE.Enabled = false;
+            this.pnlBLE.Location = new System.Drawing.Point(408, 11);
+            this.pnlBLE.Name = "pnlBLE";
+            this.pnlBLE.Size = new System.Drawing.Size(451, 80);
+            this.pnlBLE.TabIndex = 122;
             // 
             // Form1
             // 
@@ -133,9 +170,8 @@
             this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
             this.BackColor = System.Drawing.Color.LightGray;
             this.ClientSize = new System.Drawing.Size(863, 559);
+            this.Controls.Add(this.pnlBLE);
             this.Controls.Add(this.pnlProgress);
-            this.Controls.Add(this.tbSend);
-            this.Controls.Add(this.btSend);
             this.Controls.Add(this.rtbInfo);
             this.Controls.Add(this.btConnect);
             this.Controls.Add(this.cbScannedDevices);
@@ -143,10 +179,11 @@
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedToolWindow;
             this.Icon = ((System.Drawing.Icon)(resources.GetObject("$this.Icon")));
             this.Name = "Form1";
-            this.Text = "Onethinx BLE Demo App";
+            this.Text = "Onethinx BLE Demo App V1.1";
             this.FormClosing += new System.Windows.Forms.FormClosingEventHandler(this.Form1_FormClosing);
+            this.pnlBLE.ResumeLayout(false);
+            this.pnlBLE.PerformLayout();
             this.ResumeLayout(false);
-            this.PerformLayout();
 
         }
 
@@ -157,7 +194,9 @@
         private System.Windows.Forms.RichTextBox rtbInfo;
         private System.Windows.Forms.TextBox tbSend;
         private System.Windows.Forms.Button btSend;
-        private System.Windows.Forms.Panel pnlProgress;
-        private System.Windows.Forms.Timer progressTimer;
+        private System.Windows.Forms.Button btSendLoRa;
+        private System.Windows.Forms.Button btJoin;
+        private System.Windows.Forms.Panel pnlBLE;
+        private DoubleBufferedPanel pnlProgress;
     }
 }
